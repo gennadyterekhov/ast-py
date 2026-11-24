@@ -2,6 +2,8 @@
 import ast
 import json
 import math
+import os
+from pathlib import Path
 import sys
 import tokenize
 
@@ -29,17 +31,40 @@ def json_value(value):
     return value
 
 
+def parse_file(path):
+    with tokenize.open(path) as source:
+        return json_value(ast.parse(source.read(), filename=path))
+
+
+def raise_walk_error(error):
+    raise error
+
+
+def parse_directory(path):
+    root = Path(path)
+    trees = {}
+    for directory, dirs, files in os.walk(root, onerror=raise_walk_error):
+        dirs.sort()
+        for name in sorted(files):
+            file = Path(directory) / name
+            if file.suffix == ".py" and not file.is_symlink() and file.is_file():
+                trees[file.relative_to(root).as_posix()] = parse_file(str(file))
+    return trees
+
+
 def main(args):
     if len(args) != 1:
-        print("usage: ast-py FILE", file=sys.stderr)
+        print("usage: ast-py FILE|DIR", file=sys.stderr)
         return 2
 
     path = args[0]
     try:
-        with tokenize.open(path) as source:
-            tree = ast.parse(source.read(), filename=path)
-        print(json.dumps(json_value(tree), allow_nan=False))
-    except (OSError, SyntaxError, UnicodeError, ValueError) as error:
+        tree = parse_directory(path) if os.path.isdir(path) else parse_file(path)
+        print(json.dumps(tree, allow_nan=False))
+    except SyntaxError as error:
+        print(f"{error.filename or path}: {error}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError) as error:
         print(error, file=sys.stderr)
         return 2
     return 0
