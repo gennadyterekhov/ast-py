@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import ast
 import json
 import math
@@ -40,10 +41,12 @@ def raise_walk_error(error):
     raise error
 
 
-def parse_directory(path):
+def parse_directory(path, include_venv):
     root = Path(path)
     trees = {}
     for directory, dirs, files in os.walk(root, onerror=raise_walk_error):
+        if not include_venv and ".venv" in dirs:
+            dirs.remove(".venv")
         dirs.sort()
         for name in sorted(files):
             file = Path(directory) / name
@@ -53,13 +56,14 @@ def parse_directory(path):
 
 
 def main(args):
-    if len(args) != 1:
-        print("usage: ast-py FILE|DIR", file=sys.stderr)
-        return 2
+    parser = argparse.ArgumentParser(prog="ast-py")
+    parser.add_argument("--include-venv", action="store_true", help="include .venv directories")
+    parser.add_argument("path", metavar="FILE|DIR")
+    options = parser.parse_args(args)
 
-    path = args[0]
+    path = options.path
     try:
-        tree = parse_directory(path) if os.path.isdir(path) else parse_file(path)
+        tree = parse_directory(path, options.include_venv) if os.path.isdir(path) else parse_file(path)
         print(json.dumps(tree, allow_nan=False))
     except SyntaxError as error:
         print(f"{error.filename or path}: {error}", file=sys.stderr)
