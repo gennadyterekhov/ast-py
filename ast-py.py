@@ -58,12 +58,18 @@ def parse_directory(path, include_venv):
 def main(args):
     parser = argparse.ArgumentParser(prog="ast-py")
     parser.add_argument("--include-venv", action="store_true", help="include .venv directories")
-    parser.add_argument("path", metavar="FILE|DIR")
+    parser.add_argument("--files-from-stdin", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("path", metavar="FILE|DIR", nargs="?")
     options = parser.parse_args(args)
+    if options.files_from_stdin == (options.path is not None):
+        parser.error("expected FILE|DIR or --files-from-stdin")
 
     path = options.path
     try:
-        tree = parse_directory(path, options.include_venv) if os.path.isdir(path) else parse_file(path)
+        if options.files_from_stdin:
+            tree = {file: parse_file(file) for file in json.load(sys.stdin)}
+        else:
+            tree = parse_directory(path, options.include_venv) if os.path.isdir(path) else parse_file(path)
         print(json.dumps(tree, allow_nan=False))
     except SyntaxError as error:
         print(f"{error.filename or path}: {error}", file=sys.stderr)
