@@ -58,15 +58,28 @@ def parse_directory(path, include_venv):
 def main(args):
     parser = argparse.ArgumentParser(prog="ast-py")
     parser.add_argument("--include-venv", action="store_true", help="include .venv directories")
-    parser.add_argument("--files-from-stdin", action="store_true", help=argparse.SUPPRESS)
+    batch = parser.add_mutually_exclusive_group()
+    batch.add_argument("--files-from-stdin", action="store_true", help=argparse.SUPPRESS)
+    batch.add_argument("--project-files", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("path", metavar="FILE|DIR", nargs="?")
     options = parser.parse_args(args)
-    if options.files_from_stdin == (options.path is not None):
+    if (options.files_from_stdin or options.project_files) == (options.path is not None):
         parser.error("expected FILE|DIR or --files-from-stdin")
 
     path = options.path
     try:
-        if options.files_from_stdin:
+        if options.project_files:
+            trees, errors = {}, {}
+            for file in json.load(sys.stdin):
+                try:
+                    trees[file] = parse_file(file)
+                except SyntaxError as error:
+                    location = f"{file}:{error.lineno}" if error.lineno else file
+                    errors[file] = [f"{location}: {error.msg}"]
+                except (OSError, UnicodeError) as error:
+                    errors[file] = [f"{file}: {error}"]
+            tree = {"trees": trees, "errors": errors}
+        elif options.files_from_stdin:
             tree = {file: parse_file(file) for file in json.load(sys.stdin)}
         else:
             tree = parse_directory(path, options.include_venv) if os.path.isdir(path) else parse_file(path)
